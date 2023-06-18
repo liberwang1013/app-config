@@ -41,7 +41,7 @@ where
         // Read the "default" configuration file
         .add_source(config::File::from(configuration_directory.join("base")).required(true))
         // Layer on the environment-specific values.
-        .add_source(config::File::from(configuration_directory.join(environment)).required(true))
+        .add_source(config::File::from(configuration_directory.join(environment)).required(false))
         // Add in settings from environment variables (with a prefix of APP and '__' as separator)
         // E.g. `APP__APPLICATION__PORT=5001 would set `Settings.application.port`
         .add_source(
@@ -49,4 +49,57 @@ where
         )
         .build()?;
     settings.try_deserialize()
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{parse_configuration, Environment};
+
+    #[derive(serde::Deserialize)]
+    pub struct ApplicationSetting {
+        pub address: String,
+        pub port: i32,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Setting {
+        pub stage: String,
+        pub application: ApplicationSetting,
+    }
+
+    impl Environment for Setting {}
+
+    #[test]
+    fn test_default_prefix() {
+        assert_eq!("app", Setting::default_prefix());
+    }
+
+    #[test]
+    fn test_current_environment() {
+        std::env::set_var("APP_ENVIRONMENT", "dev");
+        assert_eq!("dev", Setting::current_environment());
+    }
+
+    #[test]
+    fn test_parse_configuration() {
+        std::env::set_var("APP_ENVIRONMENT", "dev");
+        let setting = parse_configuration::<Setting>();
+        assert_eq!(true, setting.is_ok())
+    }
+
+    #[test]
+    fn test_parse_configuration_stage() {
+        std::env::set_var("APP_ENVIRONMENT", "dev");
+        std::env::set_var("APP__STAGE", "abc");
+        let setting = parse_configuration::<Setting>().unwrap();
+        assert_eq!("abc", setting.stage);
+    }
+
+    #[test]
+    fn test_parse_configuration_application_port() {
+        std::env::set_var("APP__APPLICATION__PORT", "80");
+        let setting = parse_configuration::<Setting>().unwrap();
+        assert_eq!(80, setting.application.port);
+    }
 }
